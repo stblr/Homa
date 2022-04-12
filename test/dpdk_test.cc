@@ -24,8 +24,10 @@
 #include "Output.h"
 
 static const char USAGE[] = R"(DPDK Driver Test.
+
     Usage:
         dpdk_test [options] <port> (--server | <server_address>)
+
     Options:
         -h --help           Show this screen.
         --version           Show version.

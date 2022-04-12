@@ -31,13 +31,12 @@
 find_path(Dpdk_INCLUDE_DIR rte_config.h
     PATH_SUFFIXES "dpdk"
 )
-find_library(Dpdk_LIBRARY dpdk)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(DPDK REQUIRED libdpdk)
+set(Dpdk_LIBRARY ${DPDK_LINK_LIBRARIES})
 find_library(Numa_LIBRARY numa)
 find_library(Dl_LIBRARY dl)
 find_package(Threads REQUIRED)
-
-find_library(DPDK_rte_pmd_mlx4_LIBRARY rte_pmd_mlx4)
-find_library(DPDK_rte_pmd_mlx5_LIBRARY rte_pmd_mlx5)
 
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(Dpdk
@@ -64,19 +63,4 @@ if(Dpdk_FOUND AND NOT TARGET Dpdk::Dpdk)
             ${Dl_LIBRARY}
             Threads::Threads
     )
-    if (DPDK_rte_pmd_mlx4_LIBRARY)
-        target_link_libraries(Dpdk::Dpdk
-            INTERFACE
-                -lmnl
-                -lmlx4
-                -libverbs
-        )
-    endif()
-    if (DPDK_rte_pmd_mlx5_LIBRARY)
-        target_link_libraries(Dpdk::Dpdk
-            INTERFACE
-                -libverbs
-                -lmlx5
-        )
-    endif()
 endif()

@@ -636,12 +636,9 @@ DpdkDriver::Impl::_init()
 
     // Retrieve the link speed and compute information based on it.
     struct rte_eth_link link;
-    rte_eth_link_get(port, &link);
-    if (!link.link_status) {
-        throw DriverInitFailure(
-            HERE_STR, StringUtil::format(
-                          "Failed to detect a link on Ethernet port %u", port));
-    }
+    do {
+           rte_eth_link_get(port, &link);
+    } while (!link.link_status);
     if (link.link_speed != ETH_SPEED_NUM_NONE) {
         // Be conservative about the link speed. We use bandwidth in
         // QueueEstimator to estimate # bytes outstanding in the NIC's

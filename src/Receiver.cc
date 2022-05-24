@@ -318,6 +318,15 @@ Receiver::Message::~Message()
 }
 
 /**
+ * @copydoc Homa::InMessage::address()
+ */
+Driver::Address
+Receiver::Message::address() const
+{
+    return source;
+}
+
+/**
  * @copydoc Homa::InMessage::acknowledge()
  */
 void

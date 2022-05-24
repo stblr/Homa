@@ -54,6 +54,8 @@ class InMessage {
         }
     };
 
+    virtual Driver::Address address() const = 0;
+
     /**
      * Inform the sender that this message has been processed successfully.
      */

@@ -160,6 +160,7 @@ class Receiver {
         {}
 
         virtual ~Message();
+        virtual Driver::Address address() const;
         virtual void acknowledge() const;
         virtual bool dropped() const;
         virtual void fail() const;

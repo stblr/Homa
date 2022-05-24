@@ -46,6 +46,18 @@ target_link_libraries(dpdk_test
         PerfUtils
 )
 
+## message_test #################################################################
+
+add_executable(message_test
+    message_test.cc
+)
+target_link_libraries(message_test
+    PRIVATE
+        Homa::DpdkDriver
+        docopt
+        PerfUtils
+)
+
 ## Perf ########################################################################
 
 add_executable(Perf

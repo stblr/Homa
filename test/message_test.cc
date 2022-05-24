@@ -115,7 +115,7 @@ main(int argc, char* argv[])
         uint64_t out_id = 0;
         std::map<uint64_t, uint64_t> start_map;
         while (out_id < count || !start_map.empty()) {
-            if (out_id < count && out_id * period >= PerfUtils::Cycles::rdtsc() - total_start) {
+            if (out_id < count && PerfUtils::Cycles::rdtsc() - total_start >= out_id * period) {
                 uint64_t start = PerfUtils::Cycles::rdtsc();
                 start_map[out_id] = start;
                 std::cout << out_id << std::endl;

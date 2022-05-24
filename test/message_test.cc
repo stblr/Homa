@@ -146,11 +146,11 @@ main(int argc, char* argv[])
 
         uint64_t total_stop = PerfUtils::Cycles::rdtsc();
         double total_time = PerfUtils::Cycles::toSeconds(total_stop - total_start);
-        double throughput = (count * size) / total_time;
+        double throughput = (count * size) / total_time * 8;
 
         std::cout << Output::basicHeader() << std::endl;
         std::cout << Output::basic(times, "Homa Messages") << std::endl;
-        std::cout << "Throughput: " << throughput << std::endl;
+        std::cout << "Throughput: " << throughput << "b/s" << std::endl;
     }
 
     return 0;

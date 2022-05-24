@@ -87,6 +87,7 @@ DpdkDriver::Impl::Impl(int port, int argc, char* argv[],
     , packetLock()
     , packetPool()
     , overflowBufferPool()
+    , mbufsOutstanding(0)
     , mbufPool(nullptr)
     , loopbackRing(nullptr)
     , rx()

@@ -118,7 +118,6 @@ main(int argc, char* argv[])
             if (out_id < count && PerfUtils::Cycles::rdtsc() - total_start >= out_id * period) {
                 uint64_t start = PerfUtils::Cycles::rdtsc();
                 start_map[out_id] = start;
-                std::cout << out_id << std::endl;
                 Homa::unique_ptr<Homa::OutMessage> out = transport->alloc();
                 out->append(&out_id, sizeof(out_id));
                 std::vector<uint8_t> data(size);
@@ -133,7 +132,6 @@ main(int argc, char* argv[])
                 in->acknowledge();
                 uint64_t in_id;
                 in->get(0, &in_id, sizeof(in_id));
-                std::cout << in_id << std::endl;
                 auto it = start_map.find(in_id);
                 if (it != start_map.end()) {
                     uint64_t start = it->second;

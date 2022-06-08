@@ -583,9 +583,18 @@ DpdkDriver::Impl::_init()
 
     // setup and initialize the receive and transmit NIC queues,
     // and activate the port.
-    rte_eth_rx_queue_setup(port, 0, NDESC, rte_eth_dev_socket_id(port), NULL,
-                           mbufPool);
-    rte_eth_tx_queue_setup(port, 0, NDESC, rte_eth_dev_socket_id(port), NULL);
+    if (rte_eth_rx_queue_setup(port, 0, NDESC, rte_eth_dev_socket_id(port),
+                               NULL, mbufPool) != 0) {
+        throw DriverInitFailure(
+            HERE_STR,
+            StringUtil::format("Cannot setup rx queue %u on port %u", 0, port));
+    }
+    if (rte_eth_tx_queue_setup(port, 0, NDESC, rte_eth_dev_socket_id(port),
+                               NULL) != 0) {
+        throw DriverInitFailure(
+            HERE_STR,
+            StringUtil::format("Cannot setup tx queue %u on port %u", 0, port));
+    }
 
     // Install tx callback to track NIC queue length.
     if (rte_eth_add_tx_callback(port, 0, txBurstCallback, &tx.stats) == NULL) {

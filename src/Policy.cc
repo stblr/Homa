@@ -27,7 +27,7 @@ namespace Policy {
  */
 namespace Default {
 // Set to the policy configuration used to run homa+dpdk W3 in the Homa paper.
-const uint32_t RTT_TIME_US = 8;
+const uint32_t RTT_TIME_US = 25;
 const uint32_t UNSCHEDULED_PRIORITY_CUTOFFS[] = {469, 5521, 15267};
 const int MAX_OVERCOMMIT_COUNT = 4;
 }  // namespace Default
@@ -61,7 +61,7 @@ Manager::Manager(Driver* driver)
                    localUnscheduledPolicy.priorityCutoffBytes.size() + 1));
     localScheduledPolicy.degreeOvercommitment = Default::MAX_OVERCOMMIT_COUNT;
     localScheduledPolicy.minScheduledBytes = RTT_BYTES;
-    localScheduledPolicy.maxScheduledBytes = 2 * RTT_BYTES;
+    localScheduledPolicy.maxScheduledBytes = 5 * RTT_BYTES;
 }
 
 /**

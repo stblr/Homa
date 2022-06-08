@@ -39,12 +39,12 @@ namespace Drivers {
 namespace DPDK {
 
 // Number of descriptors to allocate for the tx/rx rings
-const int NDESC = 256;
+const int NDESC = 4096;
 
 // Maximum number of packet buffers that the memory pool can hold. The
 // documentation of `rte_mempool_create` suggests that the optimum value
 // (in terms of memory usage) of this number is a power of two minus one.
-const int NB_MBUF = 16383;
+const int NB_MBUF = 131071;
 
 // If cache_size is non-zero, the rte_mempool library will try to limit the
 // accesses to the common lockless pool, by maintaining a per-lcore object
@@ -62,7 +62,7 @@ const uint32_t NB_MBUF_RESERVED = 4096;
 const uint32_t NB_LOOPBACK_SLOTS = 4096;
 
 // The number of packets that the driver can buffer while corked.
-const uint16_t MAX_PKT_BURST = 32;
+const uint16_t MAX_PKT_BURST = 64;
 
 /// Size of VLAN tag, in bytes. We are using the PCP (Priority Code Point)
 /// field defined in the VLAN tag to specify the packet priority.

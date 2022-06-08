@@ -221,7 +221,7 @@ DpdkDriver::Impl::allocPacket()
     if (packet == nullptr) {
         OverflowBuffer* buf = overflowBufferPool.construct();
         packet = packetPool.construct(buf);
-        //NOTICE("OverflowBuffer used.");
+        NOTICE("OverflowBuffer used.");
     }
     return packet;
 }

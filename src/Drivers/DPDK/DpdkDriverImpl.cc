@@ -608,7 +608,7 @@ DpdkDriver::Impl::_init()
     tx.stats = std::make_unique<Tx::Stats[]>(threads);
     // Install tx callback to track NIC queue length.
     for (int i = 0; i < threads; i++) {
-        if (rte_eth_add_tx_callback(port, i, txBurstCallback, &tx.stats) ==
+        if (rte_eth_add_tx_callback(port, i, txBurstCallback, &tx.stats[i]) ==
             nullptr) {
             throw DriverInitFailure(
                 HERE_STR,

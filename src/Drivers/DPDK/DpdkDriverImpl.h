@@ -137,10 +137,10 @@ class DpdkDriver::Impl {
         Packet& operator=(const Packet&) = delete;
     };
 
-    Impl(int port, int threads = 0, const Config* const config = nullptr);
-    Impl(int port, int argc, char* argv[], int threads = 0,
+    Impl(int port, int threads = 1, const Config* const config = nullptr);
+    Impl(int port, int argc, char* argv[], int threads = 1,
          const Config* const config = nullptr);
-    Impl(int port, NoEalInit _, int threads = 0,
+    Impl(int port, NoEalInit _, int threads = 1,
          const Config* const config = nullptr);
     virtual ~Impl();
 

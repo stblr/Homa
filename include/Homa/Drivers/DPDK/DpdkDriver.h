@@ -60,7 +60,7 @@ class DpdkDriver : public Driver {
      * @throw DriverInitFailure
      *      Thrown if DpdkDriver fails to initialize for any reason.
      */
-    DpdkDriver(int port, int threads = 0, const Config* const config = nullptr);
+    DpdkDriver(int port, int threads = 1, const Config* const config = nullptr);
 
     /**
      * Construct a DpdkDriver and initialize the DPDK EAL using the provided
@@ -85,7 +85,7 @@ class DpdkDriver : public Driver {
      * @throw DriverInitFailure
      *      Thrown if DpdkDriver fails to initialize for any reason.
      */
-    DpdkDriver(int port, int argc, char* argv[], int threads = 0,
+    DpdkDriver(int port, int argc, char* argv[], int threads = 1,
                const Config* const config = nullptr);
 
     /// Used to signal to the DpdkDriver constructor that the DPDK EAL should
@@ -110,7 +110,7 @@ class DpdkDriver : public Driver {
      * @throw DriverInitFailure
      *      Thrown if DpdkDriver fails to initialize for any reason.
      */
-    DpdkDriver(int port, NoEalInit _, int threads = 0,
+    DpdkDriver(int port, NoEalInit _, int threads = 1,
                const Config* const config = nullptr);
 
     /**

@@ -27,10 +27,10 @@
 
 #include "Output.h"
 
-static const char USAGE[] = R"(DPDK Driver Test.
+static const char USAGE[] = R"(send_test
 
     Usage:
-        dpdk_test [options] <port> <size> <frequency> <threads> (--server | <server_address>)
+        send_test [options] <port> <size> <frequency> <threads> (--server | <server_address>)
 
     Options:
         -h --help           Show this screen.
@@ -43,7 +43,7 @@ main(int argc, char* argv[])
     std::map<std::string, docopt::value> args =
             docopt::docopt(USAGE, {argv + 1, argv + argc},
                     true,                       // show help if requested
-                    "DPDK Driver Test");        // version string
+                    "send_test");               // version string
 
     int size = args["<size>"].asLong();
     int frequency = args["<frequency>"].asLong();
@@ -139,6 +139,7 @@ main(int argc, char* argv[])
         uint64_t period = PerfUtils::Cycles::fromSeconds(duration) / count;
         uint64_t total_start = PerfUtils::Cycles::rdtsc();
         std::atomic<uint64_t> total_delay(0);
+        std::vector<Output::Latency> times(count * threads);
 
         auto thread_handles = std::make_unique<std::thread[]>(threads);
         for (int i = 0; i < threads; i++) {
@@ -151,6 +152,7 @@ main(int argc, char* argv[])
                     uint64_t now = PerfUtils::Cycles::rdtsc();
                     int64_t delay = j * period - (now - total_start);
                     if (delay <= 0) {
+                        uint64_t start = PerfUtils::Cycles::rdtsc();
                         auto out = transport->alloc();
                         uint64_t out_id = j * threads + i;
                         out->append(&out_id, sizeof(out_id));
@@ -161,6 +163,9 @@ main(int argc, char* argv[])
                         do {
                             transport->poll();
                         } while (out->getStatus() != Homa::OutMessage::Status::COMPLETED);
+                        uint64_t stop = PerfUtils::Cycles::rdtsc();
+                        double time = PerfUtils::Cycles::toSeconds(stop - start);
+                        times[j * threads + i] = Output::Latency(time);
                     } else {
                         thread_delay += delay;
                         PerfUtils::Cycles::sleep(PerfUtils::Cycles::toMicroseconds(delay));
@@ -180,6 +185,8 @@ main(int argc, char* argv[])
         uint64_t throughput = (frequency * duration * size) / total_time * 8;
         double load = 1.0 - (double)total_delay / (total_stop - total_start);
 
+        std::cout << Output::basicHeader() << std::endl;
+        std::cout << Output::basic(times, "send_test") << std::endl;
         std::cout << "Throughput: " << throughput << " b/s" << std::endl;
         std::cout << "Load: " << load << std::endl;
     }

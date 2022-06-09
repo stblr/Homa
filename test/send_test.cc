@@ -69,6 +69,7 @@ main(int argc, char* argv[])
                  << std::endl;
 
         uint64_t count = frequency * duration;
+        int64_t max = -1;
         uint64_t total_start;
 
         while (true) {
@@ -79,12 +80,16 @@ main(int argc, char* argv[])
                 in->get(0, &in_id, sizeof(in_id));
                 if (in_id % 100 == 0) { std::cout << in_id << std::endl; };
                 if (in_id == 0) {
+                    max = 0;
                     total_start = PerfUtils::Cycles::rdtsc();
-                } else if (in_id == count - 1) {
-                    uint64_t total_stop = PerfUtils::Cycles::rdtsc();
-                    double total_time = PerfUtils::Cycles::toSeconds(total_stop - total_start);
-                    uint64_t throughput = (count * size) / total_time * 8;
-                    std::cout << "Throughput: " << throughput << " b/s" << std::endl;
+                } else if (in_id < INT64_MAX) {
+                    max = std::max(max, static_cast<int64_t>(in_id));
+                    if (max == count - 1) {
+                        uint64_t total_stop = PerfUtils::Cycles::rdtsc();
+                        double total_time = PerfUtils::Cycles::toSeconds(total_stop - total_start);
+                        uint64_t throughput = (count * size) / total_time * 8;
+                        std::cout << "Throughput: " << throughput << " b/s" << std::endl;
+                    }
                 }
             }
 
@@ -137,7 +142,7 @@ main(int argc, char* argv[])
 
         auto thread_handles = std::make_unique<std::thread[]>(threads);
         for (int i = 0; i < threads; i++) {
-            thread_handles[i] = std::thread{ [&]() {
+            thread_handles[i] = std::thread{ [&, i]() {
                 std::vector<uint8_t> data(size);
                 std::fill(data.begin(), data.end(), 0);
                 uint64_t thread_delay = 0;
@@ -147,7 +152,7 @@ main(int argc, char* argv[])
                     int64_t delay = j * period - (now - total_start);
                     if (delay <= 0) {
                         auto out = transport->alloc();
-                        uint64_t out_id = j + i * count;
+                        uint64_t out_id = j * threads + i;
                         out->append(&out_id, sizeof(out_id));
                         out->append(data.data(), data.size());
                         out->send(server_address);

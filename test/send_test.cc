@@ -17,6 +17,8 @@
 #include <thread>
 #include <vector>
 
+#include <numa.h>
+
 #include <Homa/Homa.h>
 #include <Homa/Drivers/DPDK/DpdkDriver.h>
 #include <Cycles.h>
@@ -55,6 +57,7 @@ main(int argc, char* argv[])
     }
 
     Homa::Drivers::DPDK::DpdkDriver driver(port, threads);
+    numa_run_on_node(0);
     std::unique_ptr<Homa::Transport> transport(Homa::Transport::create(&driver, 0));
 
     if (isServer) {

@@ -268,7 +268,7 @@ DpdkDriver::Impl::sendPacket(Driver::Packet* packet)
         // we don't want to modify the buffer when the send is occuring.
         // Thus if the mbuf is in use and drop this send request.
         if (unlikely(rte_mbuf_refcnt_read(mbuf) > 1)) {
-            NOTICE("Packet still sending; dropping resend request");
+            //NOTICE("Packet still sending; dropping resend request");
             return;
         }
     }

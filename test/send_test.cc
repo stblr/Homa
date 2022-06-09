@@ -28,7 +28,7 @@
 static const char USAGE[] = R"(DPDK Driver Test.
 
     Usage:
-        dpdk_test [options] <port> <size> <frequency> (--server | <threads> <server_address>)
+        dpdk_test [options] <port> <size> <frequency> <threads> (--server | <server_address>)
 
     Options:
         -h --help           Show this screen.
@@ -50,7 +50,7 @@ main(int argc, char* argv[])
     bool isServer = args["--server"].asBool();
     std::string server_address_string;
     if (!isServer) {
-        threads = args["threads"].asLong();
+        threads = args["<threads>"].asLong();
         server_address_string = args["<server_address>"].asString();
     }
 

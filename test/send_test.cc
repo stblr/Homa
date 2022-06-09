@@ -59,6 +59,7 @@ main(int argc, char* argv[])
     Homa::Drivers::DPDK::DpdkDriver driver(port, threads);
     numa_run_on_node(0);
     std::unique_ptr<Homa::Transport> transport(Homa::Transport::create(&driver, 0));
+    uint64_t duration = 10;
 
     if (isServer) {
         std::cout << "Server address: " << driver.addressToString(driver.getLocalAddress())
@@ -67,7 +68,6 @@ main(int argc, char* argv[])
                  << " port: " << port
                  << std::endl;
 
-        uint64_t duration = 10;
         uint64_t count = frequency * duration;
         uint64_t total_start;
 
@@ -75,12 +75,12 @@ main(int argc, char* argv[])
             Homa::unique_ptr<Homa::InMessage> in = transport->receive();
             if (in != nullptr) {
                 in->acknowledge();
-                uint64_t id;
-                in->get(0, &id, sizeof(id));
-                if (id % 100 == 0) { std::cout << id << std::endl; };
-                if (id == 0) {
+                uint64_t in_id;
+                in->get(0, &in_id, sizeof(in_id));
+                if (in_id % 100 == 0) { std::cout << in_id << std::endl; };
+                if (in_id == 0) {
                     total_start = PerfUtils::Cycles::rdtsc();
-                } else if (id == count - 1) {
+                } else if (in_id == count - 1) {
                     uint64_t total_stop = PerfUtils::Cycles::rdtsc();
                     double total_time = PerfUtils::Cycles::toSeconds(total_stop - total_start);
                     uint64_t throughput = (count * size) / total_time * 8;
@@ -142,17 +142,17 @@ main(int argc, char* argv[])
                 std::fill(data.begin(), data.end(), 0);
                 uint64_t thread_delay = 0;
 
-                uint64_t out_id = 0;
-                while (out_id < count) {
+                for (uint64_t j = 0; j < count;) {
                     uint64_t now = PerfUtils::Cycles::rdtsc();
-                    int64_t delay = out_id * period - (now - total_start);
+                    int64_t delay = j * period - (now - total_start);
                     if (delay <= 0) {
                         auto out = transport->alloc();
+                        uint64_t out_id = j + i * count;
                         out->append(&out_id, sizeof(out_id));
                         out->append(data.data(), data.size());
                         out->send(server_address);
-                        out_id++;
-                        if (out_id % 100 == 0) { std::cout << out_id << std::endl; }
+                        j++;
+                        if (j % 100 == 0) { std::cout << j << std::endl; }
                         do {
                             transport->poll();
                         } while (out->getStatus() != Homa::OutMessage::Status::COMPLETED);

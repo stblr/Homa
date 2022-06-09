@@ -14,6 +14,7 @@
  */
 
 #include <iostream>
+#include <thread>
 #include <vector>
 
 #include <Homa/Homa.h>
@@ -27,7 +28,7 @@
 static const char USAGE[] = R"(DPDK Driver Test.
 
     Usage:
-        dpdk_test [options] <port> <size> <frequency> (--server | <server_address>)
+        dpdk_test [options] <port> <size> <frequency> (--server | <threads> <server_address>)
 
     Options:
         -h --help           Show this screen.
@@ -45,16 +46,16 @@ main(int argc, char* argv[])
     int size = args["<size>"].asLong();
     int frequency = args["<frequency>"].asLong();
     int port = args["<port>"].asLong();
+    int threads = 1;
     bool isServer = args["--server"].asBool();
     std::string server_address_string;
     if (!isServer) {
+        threads = args["threads"].asLong();
         server_address_string = args["<server_address>"].asString();
     }
 
-    Homa::Drivers::DPDK::DpdkDriver driver(port);
+    Homa::Drivers::DPDK::DpdkDriver driver(port, threads);
     std::unique_ptr<Homa::Transport> transport(Homa::Transport::create(&driver, 0));
-    std::vector<uint8_t> data(size);
-    std::fill(data.begin(), data.end(), 0);
 
     if (isServer) {
         std::cout << "Server address: " << driver.addressToString(driver.getLocalAddress())
@@ -126,66 +127,49 @@ main(int argc, char* argv[])
         std::cout << "Successfully connected to the server" << std::endl;
 
         uint64_t duration = 10;
-        uint64_t count = frequency * duration;
+        uint64_t count = frequency * duration / threads;
         uint64_t period = PerfUtils::Cycles::fromSeconds(duration) / count;
         uint64_t total_start = PerfUtils::Cycles::rdtsc();
-        uint64_t total_delay = 0;
-        driver.cork();
+        std::atomic<uint64_t> total_delay = 0;
 
-        //uint64_t done_count = 0;
-        //std::vector<Homa::unique_ptr<Homa::OutMessage>> out_vector(count);
+        auto thread_handles = std::make_unique<std::thread[]>(threads);
+        for (int i = 0; i < threads; i++) {
+            thread_handles[i] = std::thread{ [&]() {
+                std::vector<uint8_t> data(size);
+                std::fill(data.begin(), data.end(), 0);
+                uint64_t thread_delay = 0;
 
-        uint64_t out_id = 0;
-        while (out_id < count) {
-        //while (done_count < count) {
-            //if (out_id < count && PerfUtils::Cycles::rdtsc() - total_start >= out_id * period) {
-            int64_t delay = out_id * period - (PerfUtils::Cycles::rdtsc() - total_start);
-            if (delay <= 0) {
-                Homa::unique_ptr<Homa::OutMessage> out = transport->alloc();
-                out->append(&out_id, sizeof(out_id));
-                out->append(data.data(), data.size());
-                out->send(server_address);
-                out_id++;
-                if (out_id % 100 == 0) { std::cout << out_id << std::endl; }
-                //out_vector[out_id++] = std::move(out);
-                //std::cout << out_id << std::endl;
-                do {
-                    transport->poll();
-                    driver.uncork();
-                    driver.cork();
-                } while (out->getStatus() != Homa::OutMessage::Status::COMPLETED);
-            } else {
-                total_delay += delay;
-                PerfUtils::Cycles::sleep(PerfUtils::Cycles::toMicroseconds(delay));
-            }
-
-            //transport->poll();
-
-            /*for (; done_count < out_id; done_count++) {
-                switch (out_vector[done_count]->getStatus()) {
-                default:
-                    break;
-                case Homa::OutMessage::Status::COMPLETED:
-                case Homa::OutMessage::Status::SENT:
-                    out_vector[done_count] = nullptr;
-                    if (done_count % 10 == 0) { std::cout << "ok " << done_count << std::endl; }
-                    continue;
-                case Homa::OutMessage::Status::FAILED:
-                    std::cout << "fail " << done_count << std::endl;
-                    //Homa::unique_ptr<Homa::OutMessage> out = transport->alloc();
-                    //out->append(&out_id, sizeof(out_id));
-                    //out->append(data.data(), data.size());
-                    //out->send(server_address);
-                    //out_vector[done_count] = std::move(out);
-                    break;
+                uint64_t out_id = 0;
+                while (out_id < count) {
+                    uint64_t now = PerfUtils::Cycles::rdtsc();
+                    int64_t delay = out_id * period - (now - total_start);
+                    if (delay <= 0) {
+                        auto out = transport->alloc();
+                        out->append(&out_id, sizeof(out_id));
+                        out->append(data.data(), data.size());
+                        out->send(server_address);
+                        out_id++;
+                        if (out_id % 100 == 0) { std::cout << out_id << std::endl; }
+                        do {
+                            transport->poll();
+                        } while (out->getStatus() != Homa::OutMessage::Status::COMPLETED);
+                    } else {
+                        thread_delay += delay;
+                        PerfUtils::Cycles::sleep(PerfUtils::Cycles::toMicroseconds(delay));
+                    }
                 }
-                break;
-            }*/
+
+                total_delay += thread_delay;
+            } };
+        }
+
+        for (int i = 0; i < threads; i++) {
+            thread_handles[i].join();
         }
 
         uint64_t total_stop = PerfUtils::Cycles::rdtsc();
         double total_time = PerfUtils::Cycles::toSeconds(total_stop - total_start);
-        uint64_t throughput = (count * size) / total_time * 8;
+        uint64_t throughput = (frequency * duration * size) / total_time * 8;
         double load = 1.0 - (double)total_delay / (total_stop - total_start);
 
         std::cout << "Throughput: " << throughput << " b/s" << std::endl;

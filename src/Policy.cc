@@ -61,7 +61,7 @@ Manager::Manager(Driver* driver)
                    localUnscheduledPolicy.priorityCutoffBytes.size() + 1));
     localScheduledPolicy.degreeOvercommitment = Default::MAX_OVERCOMMIT_COUNT;
     localScheduledPolicy.minScheduledBytes = RTT_BYTES;
-    localScheduledPolicy.maxScheduledBytes = 5 * RTT_BYTES;
+    localScheduledPolicy.maxScheduledBytes = 2 * RTT_BYTES;
 }
 
 /**

@@ -19,6 +19,8 @@
 
 #include "DpdkDriverImpl.h"
 
+#include <thread>
+
 #include <rte_malloc.h>
 #include <unistd.h>
 
@@ -69,14 +71,15 @@ DpdkDriver::Impl::Packet::Packet(OverflowBuffer* overflowBuf)
 /**
  * See DpdkDriver::DpdkDriver()
  */
-DpdkDriver::Impl::Impl(int port, const Config* const config)
-    : Impl(port, default_eal_argc, const_cast<char**>(default_eal_argv), config)
+DpdkDriver::Impl::Impl(int port, int threads, const Config* const config)
+    : Impl(port, default_eal_argc, const_cast<char**>(default_eal_argv),
+           threads, config)
 {}
 
 /**
  * See DpdkDriver::DpdkDriver()
  */
-DpdkDriver::Impl::Impl(int port, int argc, char* argv[],
+DpdkDriver::Impl::Impl(int port, int argc, char* argv[], int threads,
                        const Config* const config)
     : port(port)
     , localMac(Driver::Address(0))
@@ -90,6 +93,7 @@ DpdkDriver::Impl::Impl(int port, int argc, char* argv[],
     , mbufsOutstanding(0)
     , mbufPool(nullptr)
     , loopbackRing(nullptr)
+    , threads(threads)
     , rx()
     , tx()
     , hasHardwareFilter(true)  // Cleared later if not applicable
@@ -126,7 +130,7 @@ DpdkDriver::Impl::Impl(int port, int argc, char* argv[],
  * See DpdkDriver::DpdkDriver()
  */
 DpdkDriver::Impl::Impl(int port, __attribute__((__unused__)) NoEalInit _,
-                       const Config* const config)
+                       int threads, const Config* const config)
     : port(port)
     , localMac(Driver::Address(0))
     , HIGHEST_PACKET_PRIORITY(
@@ -138,6 +142,7 @@ DpdkDriver::Impl::Impl(int port, __attribute__((__unused__)) NoEalInit _,
     , overflowBufferPool()
     , mbufPool(nullptr)
     , loopbackRing(nullptr)
+    , threads(threads)
     , rx()
     , tx()
     , hasHardwareFilter(true)  // Cleared later if not applicable
@@ -321,17 +326,15 @@ DpdkDriver::Impl::sendPacket(Driver::Packet* packet)
         rte_pktmbuf_refcnt_update(mbuf, 1);
     }
 
+    uint16_t queue =
+        std::hash<std::thread::id>{}(std::this_thread::get_id()) % threads;
     // Add the packet to the burst.
-    SpinLock::Lock txLock(tx.mutex);
-    {
-        SpinLock::Lock statsLock(tx.stats.mutex);
-        tx.stats.bufferedBytes += rte_pktmbuf_pkt_len(mbuf);
-    }
-    rte_eth_tx_buffer(port, 0, tx.buffer, mbuf);
+    tx.stats[queue].bufferedBytes += rte_pktmbuf_pkt_len(mbuf);
+    rte_eth_tx_buffer(port, queue, tx.buffer, mbuf);
 
     // Flush packets now if the driver is not corked.
     if (corked.load() < 1) {
-        rte_eth_tx_buffer_flush(port, 0, tx.buffer);
+        rte_eth_tx_buffer_flush(port, queue, tx.buffer);
     }
 }
 
@@ -347,8 +350,9 @@ void
 DpdkDriver::Impl::uncork()
 {
     if (corked.fetch_sub(1) == 1) {
-        SpinLock::Lock txLock(tx.mutex);
-        rte_eth_tx_buffer_flush(port, 0, tx.buffer);
+        uint16_t queue =
+            std::hash<std::thread::id>{}(std::this_thread::get_id()) % threads;
+        rte_eth_tx_buffer_flush(port, queue, tx.buffer);
     }
 }
 
@@ -448,8 +452,8 @@ DpdkDriver::Impl::receivePackets(uint32_t maxPackets,
 void
 DpdkDriver::Impl::releasePackets(Driver::Packet* packets[], uint16_t numPackets)
 {
+    SpinLock::Lock lock(packetLock);
     for (uint16_t i = 0; i < numPackets; ++i) {
-        SpinLock::Lock lock(packetLock);
         DpdkDriver::Impl::Packet* packet =
             static_cast<DpdkDriver::Impl::Packet*>(packets[i]);
         if (likely(packet->bufType == DpdkDriver::Impl::Packet::MBUF)) {
@@ -494,8 +498,10 @@ DpdkDriver::Impl::getLocalAddress()
 uint32_t
 DpdkDriver::Impl::getQueuedBytes()
 {
-    SpinLock::Lock lock(tx.stats.mutex);
-    return tx.stats.bufferedBytes + tx.stats.queueEstimator.getQueuedBytes();
+    uint16_t queue =
+        std::hash<std::thread::id>{}(std::this_thread::get_id()) % threads;
+    return tx.stats[queue].bufferedBytes +
+           tx.stats[queue].queueEstimator.getQueuedBytes();
 }
 
 /**
@@ -562,7 +568,7 @@ DpdkDriver::Impl::_init()
     // configure some default NIC port parameters
     memset(&portConf, 0, sizeof(portConf));
     portConf.rxmode.max_rx_pkt_len = ETHER_MAX_VLAN_FRAME_LEN;
-    rte_eth_dev_configure(port, 1, 1, &portConf);
+    rte_eth_dev_configure(port, 1, threads, &portConf);
 
     // Set up a NIC/HW-based filter on the ethernet type so that only
     // traffic to a particular port is received by this driver.
@@ -589,18 +595,26 @@ DpdkDriver::Impl::_init()
             HERE_STR,
             StringUtil::format("Cannot setup rx queue %u on port %u", 0, port));
     }
-    if (rte_eth_tx_queue_setup(port, 0, NDESC, rte_eth_dev_socket_id(port),
-                               NULL) != 0) {
-        throw DriverInitFailure(
-            HERE_STR,
-            StringUtil::format("Cannot setup tx queue %u on port %u", 0, port));
+    for (int i = 0; i < threads; i++) {
+        if (rte_eth_tx_queue_setup(port, i, NDESC, rte_eth_dev_socket_id(port),
+                                   NULL) != 0) {
+            throw DriverInitFailure(
+                HERE_STR,
+                StringUtil::format(
+                    "Cannot setup tx queue %u on port %u", i, port));
+        }
     }
 
+    tx.stats = std::make_unique<Tx::Stats[]>(threads);
     // Install tx callback to track NIC queue length.
-    if (rte_eth_add_tx_callback(port, 0, txBurstCallback, &tx.stats) == NULL) {
-        throw DriverInitFailure(
-            HERE_STR,
-            StringUtil::format("Cannot set tx callback on port %u", port));
+    for (int i = 0; i < threads; i++) {
+        if (rte_eth_add_tx_callback(port, i, txBurstCallback, &tx.stats) ==
+            nullptr) {
+            throw DriverInitFailure(
+                HERE_STR,
+                StringUtil::format(
+                    "Cannot set tx callback for queue %u on port %u", i, port));
+        }
     }
 
     // Initialize TX buffers
@@ -663,8 +677,10 @@ DpdkDriver::Impl::_init()
             bandwidthMbps.load());
     }
     // Reset the queueEstimator with the updated bandwidth.
-    new (&tx.stats.queueEstimator)
-        Util::QueueEstimator<std::chrono::steady_clock>(bandwidthMbps);
+    for (int i = 0; i < threads; i++) {
+        new (&tx.stats[i].queueEstimator)
+            Util::QueueEstimator<std::chrono::steady_clock>(bandwidthMbps);
+    }
 
     // create an in-memory ring, used as a software loopback in order to
     // handle packets that are addressed to the localhost.
@@ -712,7 +728,6 @@ DpdkDriver::Impl::txBurstCallback(uint16_t port_id, uint16_t queue,
         bytesToSend += rte_pktmbuf_pkt_len(pkts[i]);
     }
     Tx::Stats* stats = static_cast<Tx::Stats*>(user_param);
-    SpinLock::Lock lock(stats->mutex);
     assert(bytesToSend <= stats->bufferedBytes);
     stats->bufferedBytes -= bytesToSend;
     stats->queueEstimator.signalBytesSent(bytesToSend);

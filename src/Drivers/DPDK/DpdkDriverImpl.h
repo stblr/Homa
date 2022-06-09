@@ -39,7 +39,7 @@ namespace Drivers {
 namespace DPDK {
 
 // Number of descriptors to allocate for the tx/rx rings
-const int NDESC = 4096;
+const int NDESC = 256;
 
 // Maximum number of packet buffers that the memory pool can hold. The
 // documentation of `rte_mempool_create` suggests that the optimum value
@@ -62,7 +62,7 @@ const uint32_t NB_MBUF_RESERVED = 4096;
 const uint32_t NB_LOOPBACK_SLOTS = 4096;
 
 // The number of packets that the driver can buffer while corked.
-const uint16_t MAX_PKT_BURST = 64;
+const uint16_t MAX_PKT_BURST = 32;
 
 /// Size of VLAN tag, in bytes. We are using the PCP (Priority Code Point)
 /// field defined in the VLAN tag to specify the packet priority.
@@ -137,10 +137,11 @@ class DpdkDriver::Impl {
         Packet& operator=(const Packet&) = delete;
     };
 
-    Impl(int port, const Config* const config = nullptr);
-    Impl(int port, int argc, char* argv[],
+    Impl(int port, int threads = 0, const Config* const config = nullptr);
+    Impl(int port, int argc, char* argv[], int threads = 0,
          const Config* const config = nullptr);
-    Impl(int port, NoEalInit _, const Config* const config = nullptr);
+    Impl(int port, NoEalInit _, int threads = 0,
+         const Config* const config = nullptr);
     virtual ~Impl();
 
     // Interface Methods
@@ -201,6 +202,8 @@ class DpdkDriver::Impl {
     /// the HW queues.
     struct rte_ring* loopbackRing;
 
+    int threads;
+
     /// Members involved with receive (rx) operations.
     struct Rx {
         /**
@@ -220,8 +223,7 @@ class DpdkDriver::Impl {
          * Basic Constructor.
          */
         Tx()
-            : mutex()
-            , buffer(nullptr)
+            : buffer(nullptr)
             , stats()
         {}
 
@@ -235,19 +237,17 @@ class DpdkDriver::Impl {
              * Basic Constructor.
              */
             Stats()
-                : mutex()
-                , bufferedBytes(0)
+                : bufferedBytes(0)
                 , queueEstimator(0)
             {}
 
-            /// Provides thread safe access to the stats block.
-            SpinLock mutex;
             /// Number of bytes buffered but not sent.
             uint64_t bufferedBytes;
             /// Estimates the number of bytes waiting to be transmitted in the
             /// NICs transmit queue.
             Util::QueueEstimator<std::chrono::steady_clock> queueEstimator;
-        } stats;
+        };
+        std::unique_ptr<Stats[]> stats;
     } tx;
 
     /// Hardware packet filter is provided by the NIC

@@ -21,17 +21,18 @@ namespace Homa {
 namespace Drivers {
 namespace DPDK {
 
-DpdkDriver::DpdkDriver(int port, const Config* const config)
-    : pImpl(new Impl(port, config))
+DpdkDriver::DpdkDriver(int port, int threads, const Config* const config)
+    : pImpl(new Impl(port, threads, config))
 {}
 
 DpdkDriver::DpdkDriver(int port, int argc, char* argv[],
-                       const Config* const config)
-    : pImpl(new Impl(port, argc, argv, config))
+                       int threads, const Config* const config)
+    : pImpl(new Impl(port, argc, argv, threads, config))
 {}
 
-DpdkDriver::DpdkDriver(int port, NoEalInit _, const Config* const config)
-    : pImpl(new Impl(port, _, config))
+DpdkDriver::DpdkDriver(int port, NoEalInit _, int threads,
+                       const Config* const config)
+    : pImpl(new Impl(port, _, threads, config))
 {}
 
 DpdkDriver::~DpdkDriver() = default;

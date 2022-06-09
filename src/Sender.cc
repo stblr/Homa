@@ -49,7 +49,7 @@ Sender::Sender(uint64_t transportId, Driver* driver,
     , driver(driver)
     , policyManager(policyManager)
     , nextMessageSequenceNumber(1)
-    , DRIVER_QUEUED_BYTE_LIMIT(256 * driver->getMaxPayloadSize())
+    , DRIVER_QUEUED_BYTE_LIMIT(2 * driver->getMaxPayloadSize())
     , messageBuckets(messageTimeoutCycles, pingIntervalCycles)
     , queueMutex()
     , sendQueue()

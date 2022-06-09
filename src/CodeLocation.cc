@@ -19,6 +19,7 @@
 
 #include "Homa/Util.h"
 
+#include <cstring>
 #include <regex>
 
 namespace Homa {

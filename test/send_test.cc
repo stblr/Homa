@@ -100,6 +100,7 @@ main(int argc, char* argv[])
                         std::cout << "Throughput: " << throughput << " b/s" << std::endl;
                     }
                 }
+                start = stop;
             }
 
             transport->poll();

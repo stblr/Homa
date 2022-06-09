@@ -130,7 +130,7 @@ main(int argc, char* argv[])
         uint64_t count = frequency * duration / threads;
         uint64_t period = PerfUtils::Cycles::fromSeconds(duration) / count;
         uint64_t total_start = PerfUtils::Cycles::rdtsc();
-        std::atomic<uint64_t> total_delay = 0;
+        std::atomic<uint64_t> total_delay(0);
 
         auto thread_handles = std::make_unique<std::thread[]>(threads);
         for (int i = 0; i < threads; i++) {

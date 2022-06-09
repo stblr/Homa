@@ -71,23 +71,32 @@ main(int argc, char* argv[])
         uint64_t count = frequency * duration;
         int64_t max = -1;
         uint64_t total_start;
+        uint64_t start = PerfUtils::Cycles::rdtsc();
+        std::vector<Output::Latency> times(count * threads);
 
         while (true) {
             Homa::unique_ptr<Homa::InMessage> in = transport->receive();
             if (in != nullptr) {
                 in->acknowledge();
+                uint64_t stop = PerfUtils::Cycles::rdtsc();
+                double time = PerfUtils::Cycles::toSeconds(stop - start);
+                times.push_back(Output::Latency(time));
                 uint64_t in_id;
                 in->get(0, &in_id, sizeof(in_id));
                 if (in_id % 100 == 0) { std::cout << in_id << std::endl; };
                 if (in_id == 0) {
                     max = 0;
-                    total_start = PerfUtils::Cycles::rdtsc();
-                } else if (in_id < INT64_MAX) {
+                    total_start = stop;
+                    times.clear();
+                } else if (in_id < count) {
                     max = std::max(max, static_cast<int64_t>(in_id));
                     if (max == count - 1) {
-                        uint64_t total_stop = PerfUtils::Cycles::rdtsc();
+                        uint64_t total_stop = stop;
                         double total_time = PerfUtils::Cycles::toSeconds(total_stop - total_start);
                         uint64_t throughput = (count * size) / total_time * 8;
+
+                        std::cout << Output::basicHeader() << std::endl;
+                        std::cout << Output::basic(times, "send_test") << std::endl;
                         std::cout << "Throughput: " << throughput << " b/s" << std::endl;
                     }
                 }
@@ -165,7 +174,7 @@ main(int argc, char* argv[])
                         } while (out->getStatus() != Homa::OutMessage::Status::COMPLETED);
                         uint64_t stop = PerfUtils::Cycles::rdtsc();
                         double time = PerfUtils::Cycles::toSeconds(stop - start);
-                        times[j * threads + i] = Output::Latency(time);
+                        times[out_id] = Output::Latency(time);
                     } else {
                         thread_delay += delay;
                         PerfUtils::Cycles::sleep(PerfUtils::Cycles::toMicroseconds(delay));

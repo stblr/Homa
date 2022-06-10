@@ -70,6 +70,18 @@ target_link_libraries(send_test
         PerfUtils
 )
 
+## size_test #################################################################
+
+add_executable(size_test
+    size_test.cc
+)
+target_link_libraries(size_test
+    PRIVATE
+        Homa::DpdkDriver
+        docopt
+        PerfUtils
+)
+
 ## Perf ########################################################################
 
 add_executable(Perf

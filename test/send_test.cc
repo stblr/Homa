@@ -68,7 +68,7 @@ main(int argc, char* argv[])
                  << " port: " << port
                  << std::endl;
 
-        uint64_t count = frequency * duration / threads * threads;
+        uint64_t count = frequency * duration;
         uint64_t step = count / 20;
         uint64_t total_start;
         uint64_t start = PerfUtils::Cycles::rdtsc();
@@ -140,47 +140,59 @@ main(int argc, char* argv[])
         std::cout << "Successfully connected to the server" << std::endl;
 
         uint64_t duration = 10;
-        uint64_t count = frequency * duration / threads;
+        uint64_t count = frequency * duration;
         uint64_t period = PerfUtils::Cycles::fromSeconds(duration) / count;
-        uint64_t step = count * threads / 20;
+        uint64_t step = count / 20;
         uint64_t total_start = PerfUtils::Cycles::rdtsc();
-        std::atomic<uint64_t> total_delay(0);
-        std::vector<Output::Latency> times(count * threads);
+        uint64_t total_delay = 0;
+        std::vector<uint64_t> starts(count);
+        std::vector<Output::Latency> times(count);
 
+        std::atomic<uint64_t> status(UINT64_MAX);
         auto thread_handles = std::make_unique<std::thread[]>(threads);
         for (int i = 0; i < threads; i++) {
             thread_handles[i] = std::thread{ [&, i]() {
                 std::vector<uint8_t> data(size);
                 std::fill(data.begin(), data.end(), 0);
-                uint64_t thread_delay = 0;
 
-                for (uint64_t j = 0; j < count;) {
-                    uint64_t now = PerfUtils::Cycles::rdtsc();
-                    int64_t delay = j * period - (now - total_start);
-                    if (delay <= 0) {
-                        uint64_t start = PerfUtils::Cycles::rdtsc();
-                        auto out = transport->alloc();
-                        uint64_t out_id = j * threads + i;
-                        out->append(&out_id, sizeof(out_id));
-                        out->append(data.data(), data.size());
-                        out->send(server_address);
-                        j++;
-                        do {
-                            transport->poll();
-                        } while (out->getStatus() != Homa::OutMessage::Status::COMPLETED);
-                        uint64_t stop = PerfUtils::Cycles::rdtsc();
-                        double time = PerfUtils::Cycles::toSeconds(stop - start);
-                        times[out_id] = Output::Latency(time);
-                        if ((out_id + 1) % step == 0) { std::cout << out_id + 1 << std::endl; }
-                    } else {
-                        thread_delay += delay;
-                        PerfUtils::Cycles::sleep(PerfUtils::Cycles::toMicroseconds(delay));
+                while (true) {
+                    uint64_t s = status;
+                    if (s == count) {
+                        break;
+                    } else if (s != UINT64_MAX) {
+                        if (status.compare_exchange_weak(s, UINT64_MAX)) {
+                            auto out = transport->alloc();
+                            out->append(&s, sizeof(s));
+                            out->append(data.data(), data.size());
+                            out->send(server_address);
+                            do {
+                                transport->poll();
+                            } while (out->getStatus() != Homa::OutMessage::Status::COMPLETED);
+                            uint64_t start = starts[s];
+                            uint64_t stop = PerfUtils::Cycles::rdtsc();
+                            double time = PerfUtils::Cycles::toSeconds(stop - start);
+                            times[s] = Output::Latency(time);
+                        }
                     }
                 }
-
-                total_delay += thread_delay;
             } };
         }
+
+        for (uint64_t i = 0; i < count;) {
+            uint64_t now = PerfUtils::Cycles::rdtsc();
+            int64_t delay = i * period - (now - total_start);
+            if (delay <= 0) {
+                starts[i] = PerfUtils::Cycles::rdtsc();
+                status = i;
+                while (status != UINT64_MAX);
+                i++;
+                if (i % step == 0) { std::cout << i << std::endl; }
+            } else {
+                total_delay += delay;
+                PerfUtils::Cycles::sleep(PerfUtils::Cycles::toMicroseconds(delay));
+            }
+        }
+        status = count;
 
         for (int i = 0; i < threads; i++) {
             thread_handles[i].join();

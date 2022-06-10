@@ -145,7 +145,6 @@ main(int argc, char* argv[])
         uint64_t step = count / 20;
         uint64_t total_start = PerfUtils::Cycles::rdtsc();
         uint64_t total_delay = 0;
-        std::vector<uint64_t> starts(count);
         std::vector<Output::Latency> times(count);
 
         std::atomic<uint64_t> status(UINT64_MAX);
@@ -168,7 +167,7 @@ main(int argc, char* argv[])
                             do {
                                 transport->poll();
                             } while (out->getStatus() != Homa::OutMessage::Status::COMPLETED);
-                            uint64_t start = starts[s];
+                            uint64_t start = total_start + s * period;
                             uint64_t stop = PerfUtils::Cycles::rdtsc();
                             double time = PerfUtils::Cycles::toSeconds(stop - start);
                             times[s] = Output::Latency(time);
@@ -182,7 +181,6 @@ main(int argc, char* argv[])
             uint64_t now = PerfUtils::Cycles::rdtsc();
             int64_t delay = i * period - (now - total_start);
             if (delay <= 0) {
-                starts[i] = PerfUtils::Cycles::rdtsc();
                 status = i;
                 while (status != UINT64_MAX);
                 i++;
@@ -199,7 +197,7 @@ main(int argc, char* argv[])
         }
 
         while (true) {
-            uint64_t out_id = count * threads;
+            uint64_t out_id = count;
             Homa::unique_ptr<Homa::OutMessage> out = transport->alloc();
             out->append(&out_id, sizeof(out_id));
             out->send(server_address);

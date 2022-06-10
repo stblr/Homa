@@ -68,11 +68,11 @@ main(int argc, char* argv[])
                  << " port: " << port
                  << std::endl;
 
-        uint64_t count = frequency * duration;
-        int64_t max = -1;
+        uint64_t count = frequency * duration / threads * threads;
+        uint64_t step = count / 20;
         uint64_t total_start;
         uint64_t start = PerfUtils::Cycles::rdtsc();
-        std::vector<Output::Latency> times(count * threads);
+        std::vector<Output::Latency> times(count);
 
         while (true) {
             Homa::unique_ptr<Homa::InMessage> in = transport->receive();
@@ -83,22 +83,18 @@ main(int argc, char* argv[])
                 times.push_back(Output::Latency(time));
                 uint64_t in_id;
                 in->get(0, &in_id, sizeof(in_id));
-                if (in_id % 100 == 0) { std::cout << in_id << std::endl; };
+                if ((in_id + 1) % step == 0) { std::cout << in_id + 1 << std::endl; };
                 if (in_id == 0) {
-                    max = 0;
                     total_start = stop;
                     times.clear();
-                } else if (in_id < count) {
-                    max = std::max(max, static_cast<int64_t>(in_id));
-                    if (max == count - 1) {
-                        uint64_t total_stop = stop;
-                        double total_time = PerfUtils::Cycles::toSeconds(total_stop - total_start);
-                        uint64_t throughput = (count * size) / total_time * 8;
+                } else if (in_id == count) {
+                    uint64_t total_stop = stop;
+                    double total_time = PerfUtils::Cycles::toSeconds(total_stop - total_start);
+                    uint64_t throughput = (count * size) / total_time * 8;
 
-                        std::cout << Output::basicHeader() << std::endl;
-                        std::cout << Output::basic(times, "send_test") << std::endl;
-                        std::cout << "Throughput: " << throughput << " b/s" << std::endl;
-                    }
+                    std::cout << Output::basicHeader() << std::endl;
+                    std::cout << Output::basic(times, "send_test") << std::endl;
+                    std::cout << "Throughput: " << throughput << " b/s" << std::endl;
                 }
                 start = stop;
             }
@@ -138,8 +134,7 @@ main(int argc, char* argv[])
                 break;
             }
 
-            if (out->getStatus() == Homa::OutMessage::Status::COMPLETED)
-                break;
+            break;
         }
 
         std::cout << "Successfully connected to the server" << std::endl;
@@ -147,6 +142,7 @@ main(int argc, char* argv[])
         uint64_t duration = 10;
         uint64_t count = frequency * duration / threads;
         uint64_t period = PerfUtils::Cycles::fromSeconds(duration) / count;
+        uint64_t step = count * threads / 20;
         uint64_t total_start = PerfUtils::Cycles::rdtsc();
         std::atomic<uint64_t> total_delay(0);
         std::vector<Output::Latency> times(count * threads);
@@ -169,13 +165,13 @@ main(int argc, char* argv[])
                         out->append(data.data(), data.size());
                         out->send(server_address);
                         j++;
-                        if (j % 100 == 0) { std::cout << j << std::endl; }
                         do {
                             transport->poll();
                         } while (out->getStatus() != Homa::OutMessage::Status::COMPLETED);
                         uint64_t stop = PerfUtils::Cycles::rdtsc();
                         double time = PerfUtils::Cycles::toSeconds(stop - start);
                         times[out_id] = Output::Latency(time);
+                        if ((out_id + 1) % step == 0) { std::cout << out_id + 1 << std::endl; }
                     } else {
                         thread_delay += delay;
                         PerfUtils::Cycles::sleep(PerfUtils::Cycles::toMicroseconds(delay));
@@ -189,6 +185,33 @@ main(int argc, char* argv[])
         for (int i = 0; i < threads; i++) {
             thread_handles[i].join();
         }
+
+        while (true) {
+            uint64_t out_id = count * threads;
+            Homa::unique_ptr<Homa::OutMessage> out = transport->alloc();
+            out->append(&out_id, sizeof(out_id));
+            out->send(server_address);
+
+            while (true) {
+                transport->poll();
+
+                switch (out->getStatus()) {
+                default:
+                    continue;
+                case Homa::OutMessage::Status::COMPLETED:
+                    break;
+                case Homa::OutMessage::Status::FAILED:
+                    out = transport->alloc();
+                    out->append(&out_id, sizeof(out_id));
+                    out->send(server_address);
+                    continue;
+                }
+                break;
+            }
+
+           break;
+        }
+
 
         uint64_t total_stop = PerfUtils::Cycles::rdtsc();
         double total_time = PerfUtils::Cycles::toSeconds(total_stop - total_start);
